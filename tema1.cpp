@@ -4,7 +4,7 @@ using namespace std;
 
 #define NUMBER_OF_ARGUMENTS 4
 
-typedef struct map_argument argument;
+typedef struct map_data map_data;
 typedef struct file_numbers file_numbers;
 
 struct file_numbers {
@@ -12,8 +12,9 @@ struct file_numbers {
     vector<int> numbers;
 };
 
-struct map_argument {
+struct map_data {
     vector<file_numbers> files;
+    vector<vector<int>> exponent_list;
     int exponent;
 };
 
@@ -28,19 +29,20 @@ int string_to_number(string value) {
 
 void *create_exponent_lists(void *arg) {
 
-    map_argument *data = (map_argument *) arg;
+    map_data *data = (map_data *) arg;
     
-    
+    int exponent = data->exponent;
 
 
     return NULL;
 }
 
-void prioritize_files_on_threads(map_argument mapper_arguments[], vector<int> numbers[], string files_names[], int mapper_threads_number, int nr_files, int exponent) {
+void prioritize_files_on_threads(map_data mapper_arguments[], vector<int> numbers[], string files_names[], int mapper_threads_number, int nr_files, int exponent) {
     multiset<pair<int, int>> priority;
     for (int i = 0; i < mapper_threads_number; ++i) {
         priority.insert({0, i});
         mapper_arguments[i].exponent = exponent;
+        mapper_arguments[i].exponent_list.resize(exponent + 3);
     }
 
     for (int i = 0; i < nr_files; ++i) {
@@ -86,16 +88,13 @@ int main(int argc, char *argv[]) {
 
     int mapper_threads_number = string_to_number(argv[1]);
     pthread_t mapper_threads[mapper_threads_number];
-    map_argument mapper_arguments[mapper_threads_number];
+    map_data mapper_arguments[mapper_threads_number];
 
     int reducer_threads_number = string_to_number(argv[2]);
     pthread_t reducer_threads[reducer_threads_number];
     // argument reducer_arguments[reducer_threads_number];
 
     prioritize_files_on_threads(mapper_arguments, numbers, files_names, mapper_threads_number, nr_files, reducer_threads_number);
-
-    
-    
 
     int error = 0;
     for (int i = 0; i < mapper_threads_number; ++i) {
