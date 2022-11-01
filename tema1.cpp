@@ -33,6 +33,19 @@ int string_to_number(string value) {
     return result;
 }
 
+string number_to_string(int value) {
+    string result = "";
+    if (value == 0) {
+        result = "0";
+        return result;
+    }
+    while (value) {
+        result = char(value % 10 + '0') + result;
+        value /= 10;
+    }
+    return result;
+}
+
 short check(long long a, long long b, long long c) {
     long long result = 1;
     while (b) {
@@ -204,7 +217,9 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i = 0; i < reducer_threads_number; ++i) {
-        cout << reducer_arguments[i].unique_values << '\n';
+        string out_file_name = "out" + number_to_string(reducer_arguments[i].exponent_to_check) + ".txt";
+        ofstream out(out_file_name);
+        out << reducer_arguments[i].unique_values;
     }
 
     return 0;
