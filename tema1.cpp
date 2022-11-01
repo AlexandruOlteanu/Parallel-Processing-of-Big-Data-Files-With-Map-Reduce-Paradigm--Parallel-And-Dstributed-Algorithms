@@ -9,13 +9,19 @@ typedef struct file_numbers file_numbers;
 
 struct file_numbers {
     string file_name;
-    vector<int> numbers;
+    vector<long long> numbers;
 };
 
 struct map_data {
     vector<file_numbers> files;
-    vector<vector<int>> exponent_list;
+    vector<vector<long long>> exponent_list;
     int exponent;
+};
+
+struct reducer_data {
+    vector<vector<long long>> lists;
+    int exponent_to_check;
+    int unique_values;
 };
 
 
@@ -27,17 +33,68 @@ int string_to_number(string value) {
     return result;
 }
 
+short check(long long a, long long b, long long c) {
+    long long result = 1;
+    while (b) {
+        if (b & 1) {
+            result *= a;
+        }
+        b /= 2;
+        a *= a;
+        if (result > c) {
+            return 1;
+        }
+    }
+    if (result == c) {
+        return 0;
+    }
+
+    return -1;
+}
+
 void *create_exponent_lists(void *arg) {
 
     map_data *data = (map_data *) arg;
     
     int exponent = data->exponent;
-
-
+    for (auto file : data->files) {
+        for (auto number : file.numbers) {
+            if (number == 1) {
+                for (long long i = 2; i <= exponent; ++i) {
+                    data->exponent_list[i].push_back(number);
+                }
+                continue;
+            }
+            for (long long i = 2; i <= exponent; ++i) {
+                if (check(2, i, number) > 0) {
+                    break;
+                }
+                long long left = 1, right = sqrt(number);
+                bool ok = 0;
+                while (left <= right) {
+                    long long middle = left + (right - left) / 2;
+                    short check_result = check(middle, i, number);
+                    if (check_result == 0) {
+                        ok = 1;
+                        left = right + 1;
+                        continue;
+                    }
+                    if (check_result < 0) {
+                        left = middle + 1;
+                        continue;
+                    }
+                    right = middle - 1;
+                }
+                if (ok) {
+                    data->exponent_list[i].push_back(number);
+                }
+            }
+        }
+    }
     return NULL;
 }
 
-void prioritize_files_on_threads(map_data mapper_arguments[], vector<int> numbers[], string files_names[], int mapper_threads_number, int nr_files, int exponent) {
+void prioritize_files_on_threads(map_data mapper_arguments[], vector<long long> numbers[], string files_names[], int mapper_threads_number, int nr_files, int exponent) {
     multiset<pair<int, int>> priority;
     for (int i = 0; i < mapper_threads_number; ++i) {
         priority.insert({0, i});
@@ -58,6 +115,18 @@ void prioritize_files_on_threads(map_data mapper_arguments[], vector<int> number
     }
 }
 
+void *formate_lists(void *arg) {
+    reducer_data *data = (reducer_data *)arg;
+    set<long long> uniques_values;
+    for (auto list : data->lists) {
+        for (auto number : list) {
+            uniques_values.insert(number);
+        }
+    }
+    data->unique_values = uniques_values.size();
+    return NULL;
+}
+
 
 int main(int argc, char *argv[]) {
 
@@ -74,7 +143,7 @@ int main(int argc, char *argv[]) {
         in >> files_names[i];
     }
 
-    vector<int> numbers[nr_files];
+    vector<long long> numbers[nr_files];
     for (int i = 0; i < nr_files; ++i) {
         ifstream read(files_names[i]);
         int nr_numbers;
@@ -92,19 +161,51 @@ int main(int argc, char *argv[]) {
 
     int reducer_threads_number = string_to_number(argv[2]);
     pthread_t reducer_threads[reducer_threads_number];
-    // argument reducer_arguments[reducer_threads_number];
-
-    prioritize_files_on_threads(mapper_arguments, numbers, files_names, mapper_threads_number, nr_files, reducer_threads_number);
+    reducer_data reducer_arguments[reducer_threads_number];
+    
+    prioritize_files_on_threads(mapper_arguments, numbers, files_names, mapper_threads_number, nr_files, reducer_threads_number + 1);
 
     int error = 0;
     for (int i = 0; i < mapper_threads_number; ++i) {
         error = pthread_create(&mapper_threads[i], NULL, create_exponent_lists, &mapper_arguments[i]);
         if (error) {
-            cout << "Error: Creation of thread with number " << i << " failed!";
+            cout << "Error: Creation of mapper thread with number " << i << " failed!\n";
             return 1;
         }
     }
 
+    void *status;
+    for (int i = 0; i < mapper_threads_number; ++i) {
+        error = pthread_join(mapper_threads[i], &status);
+        if (error) {
+            cout << "Error: Failed to join threads";
+            return 1;
+        }
+    }
+
+    for (int i = 0; i < reducer_threads_number; ++i) {
+        reducer_arguments[i].exponent_to_check = i + 2;
+        for (auto lists_data : mapper_arguments) {
+                reducer_arguments[i].lists.push_back(lists_data.exponent_list[i + 2]);
+        }
+        reducer_arguments[i].unique_values = 0;
+        error = pthread_create(&reducer_threads[i], NULL, formate_lists, &reducer_arguments[i]);
+        if (error) {
+            cout << "Error : Creation of reducer thread with number " << i << " failed!\n";
+        }
+    }
+
+    for (int i = 0; i < reducer_threads_number; ++i) {
+        error = pthread_join(reducer_threads[i], &status);
+        if (error) {
+            cout << "Error: Failed to join threads";
+            return 1;
+        }
+    }
+
+    for (int i = 0; i < reducer_threads_number; ++i) {
+        cout << reducer_arguments[i].unique_values << '\n';
+    }
 
     return 0;
 }
