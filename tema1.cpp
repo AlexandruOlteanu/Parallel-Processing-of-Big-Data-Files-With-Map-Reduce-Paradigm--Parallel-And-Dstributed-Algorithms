@@ -16,12 +16,17 @@ struct map_data {
     vector<file_numbers> files;
     vector<vector<long long>> exponent_list;
     int exponent;
+    int id;
+    pthread_barrier_t *barrier;
 };
 
 struct reducer_data {
     vector<vector<long long>> lists;
     int exponent_to_check;
     int unique_values;
+    int mappers_number;
+    pthread_barrier_t *barrier;
+    map_data *mapper_arguments;
 };
 
 
@@ -104,14 +109,17 @@ void *create_exponent_lists(void *arg) {
             }
         }
     }
+    pthread_barrier_wait(data->barrier);
     return NULL;
 }
 
-void prioritize_files_on_threads(map_data mapper_arguments[], vector<long long> numbers[], string files_names[], int mapper_threads_number, int nr_files, int exponent) {
+void prioritize_files_on_threads(map_data mapper_arguments[], vector<long long> numbers[], string files_names[], int mapper_threads_number, int nr_files, int exponent, pthread_barrier_t &barrier) {
     multiset<pair<int, int>> priority;
     for (int i = 0; i < mapper_threads_number; ++i) {
         priority.insert({0, i});
+        mapper_arguments[i].id = i;
         mapper_arguments[i].exponent = exponent;
+        mapper_arguments[i].barrier = &barrier;
         mapper_arguments[i].exponent_list.resize(exponent + 3);
     }
 
@@ -130,6 +138,10 @@ void prioritize_files_on_threads(map_data mapper_arguments[], vector<long long> 
 
 void *formate_lists(void *arg) {
     reducer_data *data = (reducer_data *)arg;
+    pthread_barrier_wait(data->barrier);
+    for (int i = 0; i < data->mappers_number; ++i) {
+        data->lists.push_back(data->mapper_arguments[i].exponent_list[data->exponent_to_check]);
+    }
     set<long long> uniques_values;
     for (auto list : data->lists) {
         for (auto number : list) {
@@ -175,15 +187,33 @@ int main(int argc, char *argv[]) {
     int reducer_threads_number = string_to_number(argv[2]);
     pthread_t reducer_threads[reducer_threads_number];
     reducer_data reducer_arguments[reducer_threads_number];
-    
-    prioritize_files_on_threads(mapper_arguments, numbers, files_names, mapper_threads_number, nr_files, reducer_threads_number + 1);
+
+    pthread_barrier_t barrier;
+        
+    pthread_barrier_init(&barrier, NULL, mapper_threads_number + reducer_threads_number);
+
+    prioritize_files_on_threads(mapper_arguments, numbers, files_names, mapper_threads_number, nr_files, reducer_threads_number + 1, barrier);
 
     int error = 0;
-    for (int i = 0; i < mapper_threads_number; ++i) {
-        error = pthread_create(&mapper_threads[i], NULL, create_exponent_lists, &mapper_arguments[i]);
-        if (error) {
-            cout << "Error: Creation of mapper thread with number " << i << " failed!\n";
-            return 1;
+    for (int i = 0; i < mapper_threads_number + reducer_threads_number; ++i) {
+        if (i < mapper_threads_number) {
+            error = pthread_create(&mapper_threads[i], NULL, create_exponent_lists, &mapper_arguments[i]);
+            if (error) {
+                cout << "Error: Creation of mapper thread with number " << i << " failed!\n";
+                return 1;
+            }
+        }
+        else {
+            int u = i - mapper_threads_number;
+            reducer_arguments[u].exponent_to_check = u + 2;
+            reducer_arguments[u].unique_values = 0;
+            reducer_arguments[u].mapper_arguments = mapper_arguments;
+            reducer_arguments[u].barrier = &barrier;
+            reducer_arguments[u].mappers_number = mapper_threads_number;
+            error = pthread_create(&reducer_threads[u], NULL, formate_lists, &reducer_arguments[u]);
+            if (error) {
+                cout << "Error : Creation of reducer thread with number " << i << " failed!\n";
+            }
         }
     }
 
@@ -193,18 +223,6 @@ int main(int argc, char *argv[]) {
         if (error) {
             cout << "Error: Failed to join threads";
             return 1;
-        }
-    }
-
-    for (int i = 0; i < reducer_threads_number; ++i) {
-        reducer_arguments[i].exponent_to_check = i + 2;
-        for (auto lists_data : mapper_arguments) {
-                reducer_arguments[i].lists.push_back(lists_data.exponent_list[i + 2]);
-        }
-        reducer_arguments[i].unique_values = 0;
-        error = pthread_create(&reducer_threads[i], NULL, formate_lists, &reducer_arguments[i]);
-        if (error) {
-            cout << "Error : Creation of reducer thread with number " << i << " failed!\n";
         }
     }
 
