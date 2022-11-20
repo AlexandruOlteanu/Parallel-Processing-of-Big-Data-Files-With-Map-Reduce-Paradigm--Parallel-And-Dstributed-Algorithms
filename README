@@ -1,0 +1,27 @@
+<Copyright Alexandru Olteanu, grupa 332CA, alexandruolteanu2001@gmail.com>
+
+    In implementarea temei am urmat paradigma mapper-reducer pentru a putea 
+evalua in mod corect datele fisierelor. Abordarea a fost urmatoarea: Am 
+alocat static inainte de pornirea thread-urilor fisierele ce trebuie prelucrate
+de fiecare mapper in parte. Pentru a eficientiza munca fiecaruia am facut repartitia
+folosindu-ma de un structura de date multiset, structura ce imi permite sa tin 
+in permanenta mapperele sortate dupa numarul de numere pe care trebuie sa le evalueze.
+Astfel, mapperele au fost impartite aproximativ echivalent peste datele de intrare.
+    In continuare a avut loc creearea barierei pentru a nu permite ca reducerele sa 
+isi inceapa procesul pana ce toate mapperele nu sunt terminate. Crearea threadurilor
+a avut loc consecutiv, prima data cele de mapper si cele de reduce. Pentru a folosi 
+bariera in mod corespunzator, am considerat ajungerea mapperelor la bariera doar 
+dupa finalizarea procesului lor, iar pentru reducer, imediat ce sunt apelate. Astfel, 
+trecerea de bariera se face dupa ce mapperele sunt terminate iar reducerele abia incep, 
+prelucrand datele mapperelor. Pentru a rezolva procesul de mapper in mod optim, am 
+construit un algorim care se foloseste de cautare binara si ridicare la putere in 
+timp logaritmic pentru a afla toate listele in care numarul curent este plasat. Astfel, 
+s-a obtinut o complexitate de O(n * min(log2(nr), exponent) * log2(sqrt(nr))) unde "n" 
+reprezinta numarul total de numere, "nr" este numarul maxim ce poate aparea intr-un fisier 
+iar "exponent" este exponentul maxim pentru care se fac verificari.
+    Dupa ce aceste procese ajung la bariera, impreuna cu cele de reducer, cele de reducer
+continua cu eliminarea duplicatelor din listele construite, pastrand numarul de valori
+unice. In final, am realizat join-ul tuturor thread-urilor pentru a afisa solutia finala 
+in fiecare fisier.
+    Ca feedback, tema a fost interesanta, fiind primul meu contact mai activ cu threadurile, 
+dificultatea a fost corespunbzatoare.
